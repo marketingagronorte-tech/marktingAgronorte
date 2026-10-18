@@ -1,0 +1,1 @@
+{"extends":"./tsconfig.json","include":["app/**/*.ts","app/**/*.tsx","db/**/*.ts","lib/**/*.ts","lib/**/*.mjs","cloudflare-env.d.ts"],"exclude":["node_modules","build","examples"]}
