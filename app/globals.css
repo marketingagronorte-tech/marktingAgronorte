@@ -80,3 +80,7 @@ dialog.modal-event .modal-footer :is(a,button){flex-shrink:0}
 dialog.modal-event[data-short-viewport="true"][open]{display:block;overflow:auto;overscroll-behavior:contain}
 dialog.modal-event[data-short-viewport="true"]>form{display:block;height:auto;overflow:visible}
 dialog.modal-event[data-short-viewport="true"] .modal-body{height:auto;overflow:visible}
+
+dialog.modal-event .modal-footer>.agenda-feedback{flex:1 0 100%;order:-2;display:flex;align-items:center;gap:10px;min-width:0;padding:8px 12px;background:#f5f7ed;border:1px solid #e6ebd9;border-radius:8px;color:#526f41;font-size:14px;overflow-wrap:anywhere}
+dialog.modal-event .agenda-feedback>span{flex:1;min-width:0}
+dialog.modal-event .agenda-feedback>svg{flex-shrink:0}
