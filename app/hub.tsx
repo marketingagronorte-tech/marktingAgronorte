@@ -1,5 +1,6 @@
 "use client";
-import { useState,useEffect,useMemo,createContext,useContext } from "react";
+import { useState,useEffect,useMemo,useRef,createContext,useContext } from "react";
+import { createPortal } from "react-dom";
 import { LayoutDashboard,CalendarDays,ClipboardList,ChartNoAxesCombined,Users,FolderOpen,Settings,Plus,ArrowUpRight,ChevronLeft,ChevronRight,Search,X,Check,RefreshCw,Video,Camera,FileText,Clock,ExternalLink,Download,Leaf,ShieldCheck,Menu,CheckCircle2,AlertCircle,Send,Trash2,Globe,CirclePlay,Music2,SlidersHorizontal } from "lucide-react";
 import { SERVICES,PLATFORMS,STATUSES,addBusinessDays,calendarUrl,nextBirthday,compareMetrics,periodDays } from "../lib/domain.mjs";
 type Row={id:string;kind:string;data:any;updated_at:string;owner:string};
@@ -16,6 +17,7 @@ const FormState=createContext<any>(null);
 function Field({label,name,type="text",required=false,children,hint}:any){const {form,setForm}=useContext(FormState);return <label className="field"><span>{label}{required?" *":""}</span>{children||<input name={name} type={type} value={form[name]??""} onChange={e=>setForm((p:any)=>({...p,[name]:e.target.value}))} required={required} maxLength={type==="text"?180:undefined}/>} {hint&&<small>{hint}</small>}</label>;}
 export default function Hub(){
  const [tab,setTab]=useState("overview"),[records,setRecords]=useState<Row[]>([]),[members,setMembers]=useState<any[]>([]),[user,setUser]=useState<any>(null),[initialized,setInitialized]=useState(true),[loading,setLoading]=useState(true),[error,setError]=useState(""),[toast,setToast]=useState(""),[modal,setModal]=useState<any>(null),[form,setForm]=useState<any>({}),[saving,setSaving]=useState(false),[query,setQuery]=useState(""),[status,setStatus]=useState("Todos"),[platform,setPlatform]=useState("Instagram"),[month,setMonth]=useState(()=>new Date(Number(today().slice(0,4)),Number(today().slice(5,7))-1,1)),[mobile,setMobile]=useState(false),[metricPeriod,setMetricPeriod]=useState("");
+ const dialogRef=useRef<HTMLElement>(null);
  const list=(kind:string)=>records.filter(x=>x.kind===kind);
  const settingRow=records.find(x=>x.kind==="settings");
  const settings={...DEFAULTS,...settingRow?.data};
@@ -23,7 +25,23 @@ export default function Hub(){
  async function refresh(){setLoading(true);setError("");try{const r=await fetch("/api/hub",{cache:"no-store"});const d:any=await r.json();if(!r.ok)throw Error(d.error);setRecords(d.records);setMembers(d.members);setUser(d.user);setInitialized(d.initialized);}catch(e){setError(e instanceof Error?e.message:"Erro ao carregar");}finally{setLoading(false);}}
  useEffect(()=>{refresh();},[]);
  useEffect(()=>{if(toast){const t=setTimeout(()=>setToast(""),5000);return ()=>clearTimeout(t);}},[toast]);
- useEffect(()=>{if(!modal)return;const fn=(e:KeyboardEvent)=>{if(e.key==="Escape"&&!saving)setModal(null);};document.addEventListener("keydown",fn);return()=>document.removeEventListener("keydown",fn);},[modal,saving]);
+ useEffect(()=>{if(!modal)return;
+ const previousOverflow=document.body.style.overflow;
+ const previousFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
+ document.body.style.overflow="hidden";
+ dialogRef.current?.querySelector<HTMLButtonElement>('[aria-label="Fechar"]')?.focus();
+ return()=>{document.body.style.overflow=previousOverflow;previousFocus?.focus();};
+ },[!!modal]);
+ useEffect(()=>{if(!modal)return;const fn=(e:KeyboardEvent)=>{
+ if(e.key==="Escape"&&!saving)setModal(null);
+ if(e.key!=="Tab")return;
+ const dialog=dialogRef.current;
+ const controls=Array.from(dialog?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]')||[]).filter(el=>el.getClientRects().length>0);
+ const first=controls[0],last=controls[controls.length-1];
+ if(!first)return;
+ if(e.shiftKey&&(document.activeElement===first||!dialog?.contains(document.activeElement))){e.preventDefault();last.focus();}
+ else if(!e.shiftKey&&(document.activeElement===last||!dialog?.contains(document.activeElement))){e.preventDefault();first.focus();}
+ };document.addEventListener("keydown",fn);return()=>document.removeEventListener("keydown",fn);},[modal,saving]);
  async function mutate(body:any){const r=await fetch("/api/hub",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const d:any=await r.json();if(!r.ok)throw Error(d.error||"Erro ao salvar");return d;}
  function navigate(t:string){setTab(t);setQuery("");setStatus("Todos");setMobile(false);}
  function open(kind:string,row?:Row){setModal({kind,row});setForm(row?{...row.data}:kind==="request"?{title:"",service:settings.services[0].name,department:"",description:"",desiredDate:"",status:"Recebida",requester:user?.email||"",priority:"Normal",channels:"",materials:"",scope:"A alinhar",owner:"Maiely",hours:"",briefingComplete:false}:kind==="metric"?{title:"",platform,start:"",end:"",collectedAt:today(),source:"",traffic:"Orgânico"}:kind==="employee"?{title:"",department:"",monthDay:"",consent:false,consentDate:today(),evidence:"",imageConsent:false}:kind==="event"?{title:"",date:today(),type:"Reunião",description:"",time:"",endTime:"",status:"Planejado"}:kind==="content"?{title:"",date:"",platform:"Instagram",pillar:"Institucional",status:"Planejada",description:"",url:""}:kind==="member"?{email:"",role:"solicitante"}:kind==="settings"?{...settings}:{title:"",category:"Fotografia",url:"",description:"",permission:"Pendente"});}
@@ -89,7 +107,7 @@ export default function Hub(){
  <footer><span><Leaf size={13}/> Agronorte · Central de Marketing</span><span>Planejar. Produzir. Medir. Evoluir.</span></footer>
  </main></div>
  {toast&&<div className="toast" role="status"><AlertCircle size={18}/>{toast}<button className="icon" onClick={()=>setToast("")} aria-label="Fechar mensagem"><X size={16}/></button></div>}
- {modal&&<div className="modal-backdrop" onClick={()=>!saving&&setModal(null)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="eyebrow">CENTRAL AGRONORTE</span><h2 id="modal-title">{modal.row?"Detalhes do registro":({request:"Nova solicitação",event:"Novo compromisso",employee:"Cadastrar colaborador",metric:"Registrar métricas",content:"Planejar conteúdo",resource:"Registrar material",settings:"Configurar central",member:"Permissão de acesso"} as any)[modal.kind]}</h2></div><button className="icon" onClick={()=>!saving&&setModal(null)} aria-label="Fechar"><X size={22}/></button></div>
+ {modal&&createPortal(<div className="modal-backdrop" onClick={()=>!saving&&setModal(null)}><section ref={dialogRef} className={"modal "+(modal.kind==="event"?"modal-event":"")} role="dialog" aria-modal="true" aria-labelledby="modal-title" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="eyebrow">CENTRAL AGRONORTE</span><h2 id="modal-title">{modal.row?"Detalhes do registro":({request:"Nova solicitação",event:"Novo compromisso",employee:"Cadastrar colaborador",metric:"Registrar métricas",content:"Planejar conteúdo",resource:"Registrar material",settings:"Configurar central",member:"Permissão de acesso"} as any)[modal.kind]}</h2></div><button className="icon" onClick={()=>!saving&&setModal(null)} aria-label="Fechar"><X size={22}/></button></div>
  <form onSubmit={submit}><div className="modal-body">
  {modal.kind==="settings"?<>
  <Field label="Conta / ID do calendário" name="calendar" required/><Field label="Pasta de gestão no Drive" name="drive" type="url" required/><Field label="Horas semanais disponíveis" name="weeklyHours" type="number" hint="Opcional. Não inclui capacidade de designer ou programador."/><Field label="Feriados sem expediente" name="holidays" hint="AAAA-MM-DD, separados por vírgula; calendário local a confirmar."/>{PLATFORMS.map((p:string)=><Field key={p} label={"Link oficial — "+p} name={p} type="url"/>)}<h3>Prazos e esforço estimado</h3>{form.services?.map((s:any,i:number)=><div className="service-edit" key={s.name}><b>{s.name}</b><label>Dias úteis<input type="number" min="1" max="60" value={s.days} required onChange={e=>setForm((p:any)=>({...p,services:p.services.map((v:any,j:number)=>i===j?{...v,days:Number(e.target.value)}:v)}))}/></label><label>Horas<input type="number" min="0" step=".5" value={s.hours} required onChange={e=>setForm((p:any)=>({...p,services:p.services.map((v:any,j:number)=>i===j?{...v,hours:Number(e.target.value)}:v)}))}/></label></div>)}</>
@@ -102,7 +120,7 @@ export default function Hub(){
  {modal.kind==="metric"&&<><div className="form-grid"><Field label="Rede">{select("platform",PLATFORMS)}</Field><Field label="Tráfego">{select("traffic",["Orgânico","Pago","Total"])}</Field></div><div className="form-grid"><Field label="Início do período" name="start" type="date" required/><Field label="Fim do período" name="end" type="date" required/></div><Field label="Fonte / exportação / definição dos indicadores" name="source" required/><Field label="Data da coleta" name="collectedAt" type="date" required/><div className="form-grid">{numeric.map(k=><Field key={k} label={metricLabels[k]} name={k} type="number"/>)}</div><Field label="Ações, sazonalidade e limitações" name="notes"/><p className="fineprint">Deixe indisponíveis em branco. Não some alcance de posts como pessoas únicas. Seguidores: posição no fechamento. Investimento em guaranis (PYG).</p></>}
  {modal.kind==="resource"&&<><Field label="Categoria">{select("category",["Fotografia","Vídeo","Arte","Manual de marca","Ficha de produto","Apresentação","Autorização","Outro"])}</Field><Field label="Link HTTPS do arquivo ou pasta" name="url" type="url" required/><Field label="Descrição / data real do registro" name="description"/><Field label="Direito de uso">{select("permission",["Pendente","Autorizado — evidência registrada","Restrito / não reutilizar"])}</Field><Field label="Referência de autorização / autoria" name="evidence"/></>}
  </>}
- </div><div className="modal-footer">{manager&&modal.row&&modal.kind!=="settings"&&<button type="button" className="icon danger" onClick={()=>remove(modal.row)} aria-label="Excluir registro"><Trash2 size={18}/></button>} {modal.kind==="event"&&form.title&&form.date&&<a className="secondary" href={calendarUrl(form,settings.calendar)} target="_blank" rel="noreferrer"><CalendarDays size={16}/>Adicionar ao Google</a>}<button type="button" className="secondary" onClick={()=>setModal(null)}>Fechar</button>{(editor||(requester&&modal.kind==="request"&&!modal.row))&&<button className="primary" disabled={saving} type="submit">{saving?<RefreshCw size={16} className="spin"/>:<Check size={16}/>}Salvar {modal.kind==="request"?"solicitação":"registro"}</button>}</div></form></section></div>}
+ </div><div className="modal-footer">{manager&&modal.row&&modal.kind!=="settings"&&<button type="button" className="icon danger" onClick={()=>remove(modal.row)} aria-label="Excluir registro"><Trash2 size={18}/></button>} {modal.kind==="event"&&form.title&&form.date&&<a className="secondary" href={calendarUrl(form,settings.calendar)} target="_blank" rel="noreferrer"><CalendarDays size={16}/>Adicionar ao Google</a>}<button type="button" className="secondary" onClick={()=>setModal(null)}>Fechar</button>{(editor||(requester&&modal.kind==="request"&&!modal.row))&&<button className="primary" disabled={saving} type="submit">{saving?<RefreshCw size={16} className="spin"/>:<Check size={16}/>}Salvar {modal.kind==="request"?"solicitação":"registro"}</button>}</div></form></section></div>,document.body)}
  </div></FormState.Provider>;
 }
 
