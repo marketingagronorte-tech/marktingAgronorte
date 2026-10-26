@@ -84,3 +84,10 @@ dialog.modal-event[data-short-viewport="true"] .modal-body{height:auto;overflow:
 dialog.modal-event .modal-footer>.agenda-feedback{flex:1 0 100%;order:-2;display:flex;align-items:center;gap:10px;min-width:0;padding:8px 12px;background:#f5f7ed;border:1px solid #e6ebd9;border-radius:8px;color:#526f41;font-size:14px;overflow-wrap:anywhere}
 dialog.modal-event .agenda-feedback>span{flex:1;min-width:0}
 dialog.modal-event .agenda-feedback>svg{flex-shrink:0}
+
+/* Official Agronorte artwork, with original geometry and colors. */
+.sidebar .brand{flex-direction:column;align-items:flex-start;gap:5px;margin:0 8px 12px;letter-spacing:normal}
+.brand-logo{display:block;width:100%;height:auto;object-fit:contain}
+.sidebar .brand>span{font-size:8px;line-height:1.4;letter-spacing:1.8px;margin:0}
+.topbar-brand-symbol{display:block;width:30px;height:30px;object-fit:contain;flex-shrink:0}
+.footer-brand-symbol{display:block;width:18px;height:18px;object-fit:contain;flex-shrink:0}
