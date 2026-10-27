@@ -1,22 +1,23 @@
 import { env } from "cloudflare:workers";
+import {createStorage,storageInfo,StorageError} from "../../../lib/storage.mjs";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { dateValid, safeUrl, STATUSES, PLATFORMS } from "../../../lib/domain.mjs";
 export const dynamic = "force-dynamic";
 const roles=["admin","solicitante","colaborador","leitor"];
 const kinds=["request","event","content","employee","metric","resource","settings"];
 function reply(v:any,status=200){return Response.json(v,{status,headers:{"Cache-Control":"private, no-store"}});}
-function db(){return (env as any).DB;}
+function db(){return createStorage(env as any); }
 async function actor(){const u=await getChatGPTUser();if(!u)return null; const root=await db().prepare("SELECT value FROM marketing_system WHERE key = 'owner'").first(); if(!root)return {...u,role:"uninitialized"}; if(root.value===u.userId)return {...u,role:"admin"};
 const m=await db().prepare("SELECT role FROM marketing_members WHERE email = ?").bind(u.email.toLowerCase()).first();return {...u,role:m?.role||"denied"};}
 export async function GET(){
  try{const u=await actor();if(!u)return reply({error:"Entre com sua conta ChatGPT para acessar.",signIn:"/signin-with-chatgpt?return_to=%2F"},401);
- if(u.role==="uninitialized")return reply({user:u,initialized:false,records:[],members:[]});
+ if(u.role==="uninitialized")return reply({user:u,initialized:false,records:[],members:[],storage:await storageInfo(env)});
  if(u.role==="denied")return reply({error:"Seu acesso à aplicação ainda não foi autorizado pela gestão."},403);
  let rows; if(u.role==="admin"||u.role==="colaborador") rows=await db().prepare("SELECT * FROM marketing_records ORDER BY updated_at DESC LIMIT 2000").all();
  else if(u.role==="solicitante")rows=await db().prepare("SELECT * FROM marketing_records WHERE (kind = 'request' AND owner = ?) OR kind = 'settings' ORDER BY updated_at DESC LIMIT 500").bind(u.userId).all();
  else rows=await db().prepare("SELECT * FROM marketing_records WHERE kind IN ('content','event','resource') ORDER BY updated_at DESC LIMIT 1000").all();
  const members=u.role==="admin"?(await db().prepare("SELECT email, role FROM marketing_members ORDER BY email LIMIT 200").all()).results:[];
- return reply({user:u,initialized:true,records:rows.results.map((r:any)=>({...r,data:JSON.parse(r.payload),payload:undefined})),members});
+ return reply({user:u,initialized:true,records:rows.results.map((r:any)=>({...r,data:JSON.parse(r.payload),payload:undefined})),members,storage:await storageInfo(env)});
  }catch{return reply({error:"Não foi possível carregar a central. Os registros não foram alterados. Tente novamente."},503);}
 }
 const metricCounts=["followers","reach","views","impressions","likes","comments","shares","saves","visits","clicks","contacts"];
@@ -117,6 +118,6 @@ export async function POST(req:Request){
  if(existing){const changed=await db().prepare("UPDATE marketing_records SET payload=?,updated_at=? WHERE id=? AND updated_at=?").bind(JSON.stringify(data),now,id,existing.updated_at).run();if(changed.meta.changes===0)return reply({error:"Atualize a página para obter a versão mais recente"},409);}
  else await db().prepare("INSERT INTO marketing_records (id,kind,payload,owner,created_at,updated_at) VALUES (?,?,?,?,?,?)").bind(id,body.kind,JSON.stringify(data),u.userId,now,now).run();
  return reply({ok:true,id});
- }catch(e){return reply({error:e instanceof Error?e.message:"Não foi possível salvar"},400);}
+ }catch(e){return reply({error:e instanceof Error?e.message:"Não foi possível salvar"},e instanceof StorageError?e.status:400);}
 }
 
