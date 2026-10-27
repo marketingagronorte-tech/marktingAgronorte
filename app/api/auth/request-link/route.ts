@@ -1,6 +1,6 @@
 import {authClient} from '../../../../lib/supabase-server';
 import {canRequestLogin} from '../../../../lib/auth';
-import {validOrigin} from '../../../../lib/auth-policy.mjs';
+import {validOrigin,loginDeliveryFailure} from '../../../../lib/auth-policy.mjs';
 export const dynamic='force-dynamic';
 const reply=(v:unknown,status=200)=>Response.json(v,{status,headers:{'Cache-Control':'private, no-store'}});
 export async function POST(req:Request){
@@ -13,7 +13,7 @@ export async function POST(req:Request){
   if(await canRequestLogin(email)){
    const client=await authClient();const origin=new URL(req.url).origin;
    const {error}=await client.auth.signInWithOtp({email,options:{shouldCreateUser:true,emailRedirectTo:origin+'/auth/callback'}});
-   if(error)return reply({error:'Não foi possível enviar o link. Aguarde um minuto e tente novamente.'},429);
+   if(error){const failure=loginDeliveryFailure(error);return reply({error:failure.error},failure.status);}
   }
   return reply({ok:true,message:'Se o e-mail tiver acesso à Central, você receberá um link para entrar.'});
  }catch{return reply({error:'Não foi possível iniciar o acesso. Tente novamente em instantes.'},503);}

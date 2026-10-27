@@ -2,7 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPair,exportJWK,SignJWT,createLocalJWKSet,jwtVerify} from 'jose';
 import {TRUST,verifyDeployment,makeVercelHandler} from '../supabase/functions/agronorte-vercel-store/policy.mjs';
-import {verifiedIdentity,resolveActor,validOrigin} from '../lib/auth-policy.mjs';
+import {verifiedIdentity,resolveActor,validOrigin,loginDeliveryFailure} from '../lib/auth-policy.mjs';
+
+test('Email delivery distinguishes the provider quota from throttling and service failure',()=>{
+ const quota=loginDeliveryFailure({code:'over_email_send_rate_limit',status:429});
+ assert.equal(quota.status,429);assert.match(quota.error,/limite temporário de envios/);assert.doesNotMatch(quota.error,/um minuto/);
+ assert.match(loginDeliveryFailure({code:'over_request_rate_limit',status:429}).error,/pouco tempo/);
+ assert.equal(loginDeliveryFailure({status:500}).status,503);
+});
 
 test('Only confirmed, non-anonymous Supabase identities are accepted',()=>{
  assert.equal(verifiedIdentity({id:'a',email:'x@example.com'}),null);
