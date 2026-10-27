@@ -1,23 +1,22 @@
-import { env } from "cloudflare:workers";
-import {createStorage,storageInfo,StorageError} from "../../../lib/storage.mjs";
-import { getChatGPTUser } from "../../chatgpt-auth";
+const env=process.env;
+import {createStorage,storageInfo,StorageError} from "../../../lib/storage-vercel.mjs";
+import { getActor } from "../../../lib/auth";
 import { dateValid, safeUrl, STATUSES, PLATFORMS } from "../../../lib/domain.mjs";
 export const dynamic = "force-dynamic";
 const roles=["admin","solicitante","colaborador","leitor"];
 const kinds=["request","event","content","employee","metric","resource","settings"];
 function reply(v:any,status=200){return Response.json(v,{status,headers:{"Cache-Control":"private, no-store"}});}
 function db(){return createStorage(env as any); }
-async function actor(){const u=await getChatGPTUser();if(!u)return null; const root=await db().prepare("SELECT value FROM marketing_system WHERE key = 'owner'").first(); if(!root)return {...u,role:"uninitialized"}; if(root.value===u.userId)return {...u,role:"admin"};
-const m=await db().prepare("SELECT role FROM marketing_members WHERE email = ?").bind(u.email.toLowerCase()).first();return {...u,role:m?.role||"denied"};}
+async function actor(){return getActor();}
 export async function GET(){
- try{const u=await actor();if(!u)return reply({error:"Entre com sua conta ChatGPT para acessar.",signIn:"/signin-with-chatgpt?return_to=%2F"},401);
- if(u.role==="uninitialized")return reply({user:u,initialized:false,records:[],members:[],storage:await storageInfo(env)});
+ try{const u=await actor();if(!u)return reply({error:"Entre com seu e-mail autorizado para acessar.",signIn:"/entrar"},401);
+ if(u.role==="uninitialized")return reply({user:u,initialized:false,records:[],members:[],storage:await storageInfo()});
  if(u.role==="denied")return reply({error:"Seu acesso à aplicação ainda não foi autorizado pela gestão."},403);
  let rows; if(u.role==="admin"||u.role==="colaborador") rows=await db().prepare("SELECT * FROM marketing_records ORDER BY updated_at DESC LIMIT 2000").all();
  else if(u.role==="solicitante")rows=await db().prepare("SELECT * FROM marketing_records WHERE (kind = 'request' AND owner = ?) OR kind = 'settings' ORDER BY updated_at DESC LIMIT 500").bind(u.userId).all();
  else rows=await db().prepare("SELECT * FROM marketing_records WHERE kind IN ('content','event','resource') ORDER BY updated_at DESC LIMIT 1000").all();
  const members=u.role==="admin"?(await db().prepare("SELECT email, role FROM marketing_members ORDER BY email LIMIT 200").all()).results:[];
- return reply({user:u,initialized:true,records:rows.results.map((r:any)=>({...r,data:JSON.parse(r.payload),payload:undefined})),members,storage:await storageInfo(env)});
+ return reply({user:u,initialized:true,records:rows.results.map((r:any)=>({...r,data:JSON.parse(r.payload),payload:undefined})),members,storage:await storageInfo()});
  }catch{return reply({error:"Não foi possível carregar a central. Os registros não foram alterados. Tente novamente."},503);}
 }
 const metricCounts=["followers","reach","views","impressions","likes","comments","shares","saves","visits","clicks","contacts"];
@@ -91,8 +90,7 @@ export async function POST(req:Request){
  const size=Number(req.headers.get("content-length")||0);if(size>40000)return reply({error:"Dados muito grandes"},413);
  const raw=await req.text();if(raw.length>40000)return reply({error:"Dados muito grandes"},413);
  const body=JSON.parse(raw);if(!body||typeof body!=="object"||Array.isArray(body))return reply({error:"Dados inválidos"},400);const u=await actor();if(!u)return reply({error:"Acesso não autenticado"},401);
- if(body.action==="bootstrap"){if(u.role!=="uninitialized")return reply({error:"Central já ativada"},409);
- await db().prepare("INSERT OR IGNORE INTO marketing_system (key,value) VALUES ('owner',?)").bind(u.userId).run();return reply({ok:true});}
+ if(body.action==="bootstrap")return reply({error:"A Central já utiliza o banco existente."},409);
  if(u.role==="uninitialized"||u.role==="denied")return reply({error:"Acesso não autorizado"},403);
  if(body.action==="member"){if(u.role!=="admin")return reply({error:"Somente a gestão pode alterar permissões"},403);
  const email=typeof body.email==="string"?body.email.toLowerCase().trim():"";if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!roles.includes(body.role))return reply({error:"E-mail ou perfil inválido"},400);

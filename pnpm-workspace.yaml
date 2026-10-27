@@ -3,3 +3,6 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
   workerd: true
+minimumReleaseAgeExclude:
+  - '@vercel/cli-config@0.3.4'
+  - '@vercel/oidc@4.0.4'

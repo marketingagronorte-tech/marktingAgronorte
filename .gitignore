@@ -54,3 +54,7 @@ next-env.d.ts
 /.codex/
 /outputs/
 /work/
+
+# Vercel linkage and local authentication material
+/.vercel/
+!.env.example
