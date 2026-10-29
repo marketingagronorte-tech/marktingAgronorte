@@ -3,6 +3,7 @@ import {createStorage,storageInfo,StorageError} from "../../../lib/storage-verce
 import { getActor } from "../../../lib/auth";
 import { dateValid, safeUrl, STATUSES, PLATFORMS } from "../../../lib/domain.mjs";
 export const dynamic = "force-dynamic";
+import {accessSubmission,accessDecision} from "../../../lib/access-policy.mjs";
 const roles=["admin","solicitante","colaborador","leitor"];
 const kinds=["request","event","content","employee","metric","resource","settings"];
 function reply(v:any,status=200){return Response.json(v,{status,headers:{"Cache-Control":"private, no-store"}});}
@@ -11,12 +12,13 @@ async function actor(){return getActor();}
 export async function GET(){
  try{const u=await actor();if(!u)return reply({error:"Entre com seu e-mail autorizado para acessar.",signIn:"/entrar"},401);
  if(u.role==="uninitialized")return reply({user:u,initialized:false,records:[],members:[],storage:await storageInfo()});
- if(u.role==="denied")return reply({error:"Seu acesso à aplicação ainda não foi autorizado pela gestão."},403);
+ if(u.role==="denied")return reply({user:u,initialized:true,records:[],members:[],accessRequests:[],accessRequest:await db().prepare("SELECT * FROM marketing_access_requests WHERE email = ?").bind(u.email.toLowerCase()).first(),storage:{provider:"Supabase",migrating:false}});
  let rows; if(u.role==="admin"||u.role==="colaborador") rows=await db().prepare("SELECT * FROM marketing_records ORDER BY updated_at DESC LIMIT 2000").all();
  else if(u.role==="solicitante")rows=await db().prepare("SELECT * FROM marketing_records WHERE (kind = 'request' AND owner = ?) OR kind = 'settings' ORDER BY updated_at DESC LIMIT 500").bind(u.userId).all();
  else rows=await db().prepare("SELECT * FROM marketing_records WHERE kind IN ('content','event','resource') ORDER BY updated_at DESC LIMIT 1000").all();
  const members=u.role==="admin"?(await db().prepare("SELECT email, role FROM marketing_members ORDER BY email LIMIT 200").all()).results:[];
- return reply({user:u,initialized:true,records:rows.results.map((r:any)=>({...r,data:JSON.parse(r.payload),payload:undefined})),members,storage:await storageInfo()});
+ const accessRequests=u.role==="admin"?(await db().prepare("SELECT * FROM marketing_access_requests ORDER BY created_at DESC LIMIT 500").all()).results:[];
+ return reply({accessRequests,user:u,initialized:true,records:rows.results.map((r:any)=>({...r,data:JSON.parse(r.payload),payload:undefined})),members,storage:await storageInfo()});
  }catch{return reply({error:"Não foi possível carregar a central. Os registros não foram alterados. Tente novamente."},503);}
 }
 const metricCounts=["followers","reach","views","impressions","likes","comments","shares","saves","visits","clicks","contacts"];
@@ -50,7 +52,7 @@ function clean(kind:string,input:any,previous:any=null){
   if(["Aprovada","Concluída"].includes(d.status))required("approval");
  }
  if(kind==="event"){
-  required("date","type");choice("type",["Reunião","Captação de fotos","Captação de vídeo","Entrega","Evento da cooperativa","Campanha interna","Treinamento"]);choice("status",["Planejado","Confirmado","Concluído","Cancelado"],"Planejado");
+  required("date","type");choice("type",["Reunião","Captação de fotos","Captação de vídeo","Entrega","Evento da cooperativa","Campanha interna","Treinamento","Publicação"]);choice("status",["Planejado","Confirmado","Concluído","Cancelado"],"Planejado");
   if(d.time||d.endTime){if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(d.time||"")||!/^([01]\d|2[0-3]):[0-5]\d$/.test(d.endTime||"")||d.endTime<=d.time)throw Error("Informe horário final posterior ao início");}
  }
  if(kind==="content"){
@@ -91,6 +93,18 @@ export async function POST(req:Request){
  const raw=await req.text();if(raw.length>40000)return reply({error:"Dados muito grandes"},413);
  const body=JSON.parse(raw);if(!body||typeof body!=="object"||Array.isArray(body))return reply({error:"Dados inválidos"},400);const u=await actor();if(!u)return reply({error:"Acesso não autenticado"},401);
  if(body.action==="bootstrap")return reply({error:"A Central já utiliza o banco existente."},409);
+ if(body.action==="requestAccess"){
+ if(u.role!=="denied")return reply({error:"Seu acesso já está liberado."},409);
+ const data=accessSubmission(body,u);
+ await db().prepare("SELECT marketing_access_submit(?,?,?,?)").bind(data.email,data.name,data.department,data.reason).run();return reply({ok:true});
+ }
+ if(body.action==="reviewAccess"){
+ if(u.role!=="admin")return reply({error:"Somente a gestão pode aprovar acessos."},403);
+ const data=accessDecision(body);
+ const result=await db().prepare("SELECT marketing_access_decide(?,?,?,?,?,?,?)").bind(u.userId,data.email,data.decision,data.role,data.updatedAt,data.note,u.email).run();
+ if(result.meta?.changes!==1)return reply({error:"A solicitação já foi analisada ou mudou. Atualize a lista."},409);
+ return reply({ok:true});
+ }
  if(u.role==="uninitialized"||u.role==="denied")return reply({error:"Acesso não autorizado"},403);
  if(body.action==="member"){if(u.role!=="admin")return reply({error:"Somente a gestão pode alterar permissões"},403);
  const email=typeof body.email==="string"?body.email.toLowerCase().trim():"";if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!roles.includes(body.role))return reply({error:"E-mail ou perfil inválido"},400);

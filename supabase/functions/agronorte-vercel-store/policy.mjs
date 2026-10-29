@@ -1,5 +1,5 @@
 export const TRUST={issuer:'https://oidc.vercel.com/markting2',audience:'https://vercel.com/markting2',subject:'owner:markting2:project:agronorte-marketing:environment:production',ownerId:'team_Uy3yIU2Saiik92azub5JP7Nt',projectId:'prj_750MA2Tf3laimTA4CkROEniUWTJt'};
-export const ALLOWED_OPERATIONS=new Set(['owner_get','member_get','records_admin','records_requester','records_reader','members_list','record_get','member_upsert','member_delete','record_delete','record_update','record_insert','health']);
+export const ALLOWED_OPERATIONS=new Set(['access_get','access_list','access_submit','access_decide','owner_get','member_get','records_admin','records_requester','records_reader','members_list','record_get','member_upsert','member_delete','record_delete','record_update','record_insert','health']);
 export function assertDeploymentClaims(payload){if(payload.owner_id!==TRUST.ownerId||payload.project_id!==TRUST.projectId||payload.environment!=='production')throw Error('Untrusted deployment');}
 export async function verifyDeployment(token,jwks,jwtVerify){
  const {payload}=await jwtVerify(token,jwks,{issuer:TRUST.issuer,audience:TRUST.audience,subject:TRUST.subject,algorithms:['RS256'],requiredClaims:['exp','iat','nbf','owner_id','project_id','environment']});

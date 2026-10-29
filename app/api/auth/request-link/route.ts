@@ -15,6 +15,6 @@ export async function POST(req:Request){
    const {error}=await client.auth.signInWithOtp({email,options:{shouldCreateUser:true,emailRedirectTo:origin+'/auth/callback'}});
    if(error){const failure=loginDeliveryFailure(error);return reply({error:failure.error},failure.status);}
   }
-  return reply({ok:true,message:'Se o e-mail tiver acesso à Central, você receberá um link para entrar.'});
+  return reply({ok:true,message:'Você receberá um link para confirmar seu e-mail. Se ainda não tiver acesso, solicite a aprovação após entrar.'});
  }catch{return reply({error:'Não foi possível iniciar o acesso. Tente novamente em instantes.'},503);}
 }

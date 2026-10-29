@@ -1,5 +1,5 @@
 export const SITE_ID='appgprj_6ad2d343a1748191a74fa49384d22c74';
-export const OPERATIONS=new Set(['owner_get','member_get','records_admin','records_requester','records_reader','members_list','record_get','owner_init','member_upsert','member_delete','record_delete','record_update','record_insert','health','snapshot_export','snapshot_import','import_finalize']);
+export const OPERATIONS=new Set(['access_get','access_list','access_submit','access_decide','owner_get','member_get','records_admin','records_requester','records_reader','members_list','record_get','owner_init','member_upsert','member_delete','record_delete','record_update','record_insert','health','snapshot_export','snapshot_import','import_finalize']);
 export const encode=value=>new TextEncoder().encode(value);
 export function toBase64url(bytes){let text='';for(const b of new Uint8Array(bytes))text+=String.fromCharCode(b);return btoa(text).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
 export function fromBase64url(value){return Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));}

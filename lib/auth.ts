@@ -10,9 +10,5 @@ export async function getActor(){
  const member=user.email===ownerEmail.toLowerCase()?null:await db.prepare('SELECT role FROM marketing_members WHERE email = ?').bind(user.email).first();
  return resolveActor(user,root?.value,member?.role,ownerEmail);
 }
-export async function canRequestLogin(email:string){
- const owner=process.env.AGRONORTE_OWNER_EMAIL;if(!owner)throw Error('Conta administradora não configurada.');
- if(email===owner.toLowerCase())return true;
- const member=await createStorage(process.env).prepare('SELECT role FROM marketing_members WHERE email = ?').bind(email).first();
- return ['admin','colaborador','solicitante','leitor'].includes(member?.role);
-}
+// Confirming an email establishes identity only; getActor still denies all data until approval.
+export async function canRequestLogin(email:string){return email.length<=254&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);}
