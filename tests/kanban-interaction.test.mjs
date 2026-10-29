@@ -1,0 +1,18 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+const source=readFileSync(new URL('../app/stitch-workspace.tsx',import.meta.url),'utf8');
+const component=source.slice(source.indexOf('export function StitchKanban'),source.indexOf('export function StitchCalendar'));
+const code=ts.transpileModule(component,{compilerOptions:{target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React,jsxFactory:'h',jsxFragmentFactory:'Fragment',module:ts.ModuleKind.ESNext}}).outputText.replace('export function','function');
+function harness(editor=true,failure=false){let index=0;const state=[],moves=[];const row={id:'original-content',kind:'content',updated_at:'version-one',data:{title:'Campanha real',date:'2026-10-30',status:'Planejada',platform:'Instagram',pillar:'Institucional'}};
+const deps={h:(type,props,...children)=>({type,props:{...props,children}}),Fragment:'fragment',useState:initial=>{const i=index++;if(!(i in state))state[i]=initial;return [state[i],v=>state[i]=v];},PLATFORMS:['Instagram'],FileText:'FileText',Search:'Search',Plus:'Plus',CheckCircle2:'CheckCircle2',PanelTitle:'PanelTitle',ContentCard:'ContentCard',StatusChip:'StatusChip',ArrowUpRight:'ArrowUpRight',date:x=>x};
+const Component=new Function(...Object.keys(deps),code+'\nreturn StitchKanban;')(...Object.values(deps));
+const context={editor,records:[row],moveContent:async(r,s)=>{moves.push({r,s});if(failure)throw Error('Falha de conexão');}};
+function nodes(t){if(!t||typeof t!=='object')return [];if(Array.isArray(t))return t.flatMap(nodes);return [t,...nodes(t.props?.children)];}
+return {row,moves,nodes,render(){index=0;return Component({context});}};}
+const settle=()=>new Promise(resolve=>setImmediate(resolve));
+test('Drag and drop passes the original record and target stage to persistent saving',async()=>{const h=harness();const data={};const transfer={setData:(k,v)=>data[k]=v,getData:k=>data[k]||''};h.nodes(h.render()).find(n=>n.type==='ContentCard').props.onDragStart({dataTransfer:transfer});const target=h.nodes(h.render()).find(n=>n.props?.className==='sx-kanban-column col-1');target.props.onDrop({preventDefault(){},dataTransfer:transfer});await settle();assert.equal(h.moves.length,1);assert.equal(h.moves[0].r,h.row);assert.equal(h.moves[0].s,'Em produção');assert.equal(h.moves[0].r.updated_at,'version-one');});
+test('Accessible select changes the stage without requiring dragging',async()=>{const h=harness();const select=h.nodes(h.render()).find(n=>n.type==='select'&&n.props?.['aria-label']?.includes('para etapa'));select.props.onChange({target:{value:'Em aprovação'}});await settle();assert.equal(h.moves[0].s,'Em aprovação');});
+test('Read-only users cannot move records, even if a drop handler is invoked',async()=>{const h=harness(false);const nodes=h.nodes(h.render());assert.equal(nodes.find(n=>n.type==='ContentCard').props.onDragStart,undefined);nodes.find(n=>n.props?.className==='sx-kanban-column col-1').props.onDrop({preventDefault(){},dataTransfer:{getData:()=>h.row.id}});await settle();assert.equal(h.moves.length,0);});
+test('A failed save is reported and the original record remains in its original stage',async()=>{const h=harness(true,true);const select=h.nodes(h.render()).find(n=>n.type==='select'&&n.props?.['aria-label']?.includes('para etapa'));select.props.onChange({target:{value:'Em produção'}});await settle();const alert=h.nodes(h.render()).find(n=>n.props?.role==='alert');assert.ok(alert);assert.ok(alert.props.children.includes('Falha de conexão'));assert.equal(h.row.data.status,'Planejada');});

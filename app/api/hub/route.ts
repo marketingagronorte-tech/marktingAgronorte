@@ -57,7 +57,7 @@ function clean(kind:string,input:any,previous:any=null){
  }
  if(kind==="content"){
   choice("platform",[...PLATFORMS,"WhatsApp interno","Mural interno","Site"]);choice("pillar",["Institucional","Produtos e oportunidades comerciais","Agronomia e educação","Cooperativismo","Pessoas e cultura","Negócios e comércio internacional","Conscientização","Bastidores"]);choice("status",["Planejada","Em produção","Em aprovação","Aprovada","Publicada","Cancelada"],"Planejada");
-  if(["Aprovada","Publicada"].includes(d.status))required("approval");
+  if(["Aprovada","Publicada"].includes(d.status))required("approval");if(d.status==="Publicada")required("date");
  }
  if(kind==="employee"){
   if(!/^\d{2}-\d{2}$/.test(d.monthDay||"")||!dateValid("2000-"+d.monthDay))throw Error("Aniversário inválido");
@@ -124,7 +124,10 @@ export async function POST(req:Request){
  if(existing&&(body.id!==existing.id||typeof body.updatedAt!=="string"||body.updatedAt!==existing.updated_at))return reply({error:"Este registro mudou. Atualize a página antes de salvar."},409);
  if(!body.data||typeof body.data!=="object"||Array.isArray(body.data))return reply({error:"Dados inválidos"},400);
  const input={...body.data};if(u.role==="solicitante"){input.status="Recebida";delete input.confirmedDate;delete input.approval;input.requester=u.email;input.briefingComplete=false;input.scope="A alinhar";input.owner="";input.hours=null;}
- const data=clean(body.kind,input,existing?JSON.parse(existing.payload):null);
+ const previous=existing?JSON.parse(existing.payload):null;
+ const data=clean(body.kind,input,previous);
+ // Imported previews and provider identifiers are server-managed, never trusted from form input.
+ for(const key of ["thumbnail","originalName","importSource","importedAt","fileSize","sha256","resourceId","googleEventId","googleCalendarId","googleSyncedAt","googleFingerprint"]){if(previous?.[key]!==undefined)data[key]=previous[key];}
  const id=body.kind==="settings"?"settings":existing?.id||crypto.randomUUID();
  const now=new Date().toISOString();
  if(existing){const changed=await db().prepare("UPDATE marketing_records SET payload=?,updated_at=? WHERE id=? AND updated_at=?").bind(JSON.stringify(data),now,id,existing.updated_at).run();if(changed.meta.changes===0)return reply({error:"Atualize a página para obter a versão mais recente"},409);}
